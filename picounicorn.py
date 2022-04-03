@@ -10,6 +10,17 @@ __HEIGHT = 7
 # was set and if you did call init or not - or multiple times.
 __shut_up_dummy = True
 
+BUTTON_A = "A"
+BUTTON_B = "B"
+BUTTON_X = "X"
+BUTTON_Y = "Y"
+
+buttons = {
+    BUTTON_A: False,
+    BUTTON_B: False,
+    BUTTON_X: False,
+    BUTTON_Y: False,
+}
 
 def init():
     global __init_called
@@ -44,13 +55,21 @@ def set_pixel_value(x: int, y: int, v: int) -> None:
     __ensure_init_called()
     if not __shut_up_dummy:
         print(f"picounicorn.set_pixel_value() called: x={x}, y={y}, v={v}")
-
+        
+def is_pressed(buttonKey: String) -> bool:
+    return buttons.get(buttonKey)
 
 def dummy_shut_up():
     global __shut_up_dummy
     __shut_up_dummy = True
 
 
-def dummy_talk_to_the_hand():
+def dummy_talk():
     global __shut_up_dummy
     __shut_up_dummy = False
+    
+def dummy_set_button_state(buttonKey: String, state: bool) -> None:
+    buttons.update({buttonKey: state})
+    
+def dummy_reset_buttons() -> None:
+    {buttons.update({key: False}) for key in buttons.keys()}
