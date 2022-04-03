@@ -1,14 +1,17 @@
-# Dummy implementation of the picounicorn API with some optional debug feats.
+# Dummy implementation of the picounicorn API with some optional debug and test features.
 
 __init_called = False
 __WIDTH = 16
 __HEIGHT = 7
 
-# Toggle any print statements for debugging here or use dummy_shut_up / dummy_talk_to_the_hand
+# Toggle any print statements for debugging here or use dummy_logging_off / dummy_logging_on
 # (don't forget to remove the method calls to dummy* from your code before deploying on Pico)
 # Default it is turned off. When enabled it prints out which rbg color at which (LED )coords
 # was set and if you did call init or not - or multiple times.
-__shut_up_dummy = True
+# Button pressed states (A is pressed) can be simulated by dummy_set_button_state(BUTTON_A, True)
+# Every single button can be simulated and the dummy_reset_buttons() method can be used to reset 
+# all buttons to False (e.g. in unit tests)
+__logging = False
 
 BUTTON_A = "A"
 BUTTON_B = "B"
@@ -26,12 +29,12 @@ def init():
     global __init_called
     if not __init_called:
         __init_called = True
-    elif __init_called and not __shut_up_dummy:
+    elif __init_called and __logging():
         print("picounicorn.init() was already called!")
 
 
 def __ensure_init_called() -> None:
-    if not __init_called and not __shut_up_dummy:
+    if not __init_called and __logging():
         print("Call picounicorn.init() first!")
 
 
@@ -47,29 +50,37 @@ def get_height() -> int:
 
 def set_pixel(x: int, y: int, r: int, b: int, g: int) -> None:
     __ensure_init_called()
-    if not __shut_up_dummy:
+    if __logging():
         print(f"picounicorn.set_pixel() called: x={x}, y={y}, rgb={r},{g},{b}")
 
 
 def set_pixel_value(x: int, y: int, v: int) -> None:
     __ensure_init_called()
-    if not __shut_up_dummy:
+    if __logging():
         print(f"picounicorn.set_pixel_value() called: x={x}, y={y}, v={v}")
         
 def is_pressed(buttonKey: String) -> bool:
     return buttons.get(buttonKey)
 
-def dummy_shut_up():
-    global __shut_up_dummy
-    __shut_up_dummy = True
+def __logging() -> bool:
+    return __logging
+
+def dummy_logging_off():
+    global __logging
+    __logging = False
 
 
-def dummy_talk():
-    global __shut_up_dummy
-    __shut_up_dummy = False
+def dummy_logging_on():
+    global __logging
+    __logging = True
     
 def dummy_set_button_state(buttonKey: String, state: bool) -> None:
+    if __logging():
+        print(f"setting button {buttonKey} to pressed state {state}")
     buttons.update({buttonKey: state})
     
 def dummy_reset_buttons() -> None:
+    if __logging():
+        print("resetting all buttons to pressed state False")
     {buttons.update({key: False}) for key in buttons.keys()}
+
