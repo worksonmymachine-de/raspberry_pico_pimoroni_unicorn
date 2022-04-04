@@ -8,9 +8,9 @@
 # Every single button can be simulated and the dummy_reset_buttons() method can be used to reset
 # all buttons to False (e.g. in unit tests)
 
-_init_called = False
 _WIDTH = 16
 _HEIGHT = 7
+_init_called = False
 _logging_on = False
 
 BUTTON_A = "A"
@@ -32,11 +32,6 @@ def init():
         _init_called = True
     elif _init_called and _logging():
         print("picounicorn.init() was already called!")
-
-
-def _ensure_init_called() -> None:
-    if not _init_called and _logging():
-        print("Call picounicorn.init() first!")
 
 
 def get_width() -> int:
@@ -67,6 +62,11 @@ def is_pressed(button_key: str) -> bool:
 
 def _logging() -> bool:
     return _logging_on
+
+
+def _ensure_init_called() -> None:
+    if not _init_called and _logging():
+        print("Call picounicorn.init() first!")
 
 
 def dummy_logging_off():
