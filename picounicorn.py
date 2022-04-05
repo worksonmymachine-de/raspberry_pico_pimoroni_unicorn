@@ -28,10 +28,11 @@ _buttons = {
 
 def init():
     global _init_called
-    if not _init_called:
+    if _init_called:
+        _log("picounicorn.init() was already called!")
+    else:
         _init_called = True
-    elif _init_called and _logging():
-        print("picounicorn.init() was already called!")
+        _log("picounicorn.init() called")
 
 
 def get_width() -> int:
@@ -46,14 +47,12 @@ def get_height() -> int:
 
 def set_pixel(x: int, y: int, r: int, b: int, g: int) -> None:
     _ensure_init_called()
-    if _logging():
-        print(f"picounicorn.set_pixel() called: x={x}, y={y}, rgb={r},{g},{b}")
+    _log(f"picounicorn.set_pixel() called: coords={x},{y} rgb={r},{g},{b}")
 
 
 def set_pixel_value(x: int, y: int, v: int) -> None:
     _ensure_init_called()
-    if _logging():
-        print(f"picounicorn.set_pixel_value() called: x={x}, y={y}, v={v}")
+    _log(f"picounicorn.set_pixel_value() called: coords={x},{y} v={v}")
 
 
 def is_pressed(button_key: str) -> bool:
@@ -65,8 +64,13 @@ def _logging() -> bool:
 
 
 def _ensure_init_called() -> None:
-    if not _init_called and _logging():
-        print("Call picounicorn.init() first!")
+    if not _init_called:
+        _log("Call picounicorn.init() first!")
+
+
+def _log(msg: str) -> None:
+    if _logging():
+        print(msg)
 
 
 def dummy_logging_off():
@@ -80,13 +84,11 @@ def dummy_logging_on():
 
 
 def dummy_set_button_state(button_key: str, state: bool) -> None:
-    if _logging():
-        print(f"setting button {button_key} to pressed state {state}")
+    _log(f"setting button {button_key} to pressed state {state}")
     _buttons.update({button_key: state})
 
 
 def dummy_reset_buttons() -> None:
-    if _logging():
-        print("resetting all buttons to pressed state False")
+    _log("resetting all buttons to pressed state False")
     for key in _buttons.keys():
         _buttons.update({key: False})
