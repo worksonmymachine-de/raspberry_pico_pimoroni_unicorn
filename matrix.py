@@ -1,8 +1,5 @@
-# import asyncio as uasyncio
 import uasyncio
-import gc
 import random
-# import micropython
 
 import picounicorn
 
@@ -13,21 +10,20 @@ TRIGGER_TOGGLE_A = 2
 TRIGGER_TOGGLE_B = 3
 TRIGGER_TOGGLE_C = 4
 
-WIDTH = 16  # picounicorn width (amount of LEDs)
-HEIGHT = 7  # picounicorn heigth (amount of LEDs)
+# pico unicorn constants
+WIDTH = 16
+HEIGHT = 7
 
+# current interrupt
 ACTIVE_TRIGGER = TRIGGER_RUN
 
 
 def _next_index_and_value(values: [], current_index: int) -> (int, tuple):
-    next_index_value = (current_index + 1, values[current_index + 1]) if current_index + 1 < len(values) else (0, values[0])
-    #     print(f"values={values}, current_index = {current_index} -> {next_index_value}")
-    return next_index_value
+    return (current_index + 1, values[current_index + 1]) if current_index + 1 < len(values) else (0, values[0])
 
 
 def _random_length(limit: (int, int)) -> int:
-    result = random.randint(limit[0], limit[1])
-    return result
+    return random.randint(limit[0], limit[1])
 
 
 def init_picounicorn() -> None:
@@ -43,8 +39,8 @@ class Matrix:
     # the lower the value the faster it moves
     delays = (0.256, 0.128, 0.098, 0.064, 0.032, 0.020, 0.010)
 
+    # color combinations - rbg values for start, body and gap
     black = (0, 0, 0)
-    
     colors = (
         ((0, 120, 0), (0, 40, 0), black), # green
         ((180, 0, 0), (70, 0, 0), black), # red
@@ -97,17 +93,14 @@ class Matrix:
                 await uasyncio.sleep(self.delay)
             if TRIGGER_TOGGLE_A <= ACTIVE_TRIGGER <= TRIGGER_TOGGLE_C:
                 await self.mode_trigger_methods.get(ACTIVE_TRIGGER)()
-                #                 init_picounicorn()
                 ACTIVE_TRIGGER = TRIGGER_RUN
             await uasyncio.sleep(0)
 
     def _update_display(self):
-        # micropython.mem_info()
         for x in range(WIDTH):
             for y, part in enumerate(self.lines[x].get_visible_dots()):
                 r, g, b = self.colors[self.current_color_index][part]
                 picounicorn.set_pixel(x, HEIGHT - 1 - y, r, g, b)
-        # gc.collect()
 
 
 class _MatrixLine:
@@ -131,7 +124,6 @@ class _MatrixLine:
 
 
 async def toggle_mode(trigger: int) -> None:
-    print(f"trigger: {trigger}")
     global ACTIVE_TRIGGER
     ACTIVE_TRIGGER = trigger
     await uasyncio.sleep(0.3)
@@ -140,10 +132,7 @@ async def toggle_mode(trigger: int) -> None:
 async def handle_buttons():
     while True:
         if picounicorn.is_pressed(picounicorn.BUTTON_A):
-            if ACTIVE_TRIGGER != TRIGGER_STOP:
-                await toggle_mode(TRIGGER_STOP)
-            else:
-                await toggle_mode(TRIGGER_RUN)
+            await toggle_mode(TRIGGER_STOP) if ACTIVE_TRIGGER != TRIGGER_STOP else await toggle_mode(TRIGGER_RUN)
         if picounicorn.is_pressed(picounicorn.BUTTON_B):
             await toggle_mode(TRIGGER_TOGGLE_A)
         if picounicorn.is_pressed(picounicorn.BUTTON_X):
