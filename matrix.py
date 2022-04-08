@@ -13,11 +13,9 @@ TRIGGER_TOGGLE_A = 2
 TRIGGER_TOGGLE_B = 3
 TRIGGER_TOGGLE_C = 4
 
-# pico unicorn constants
 WIDTH = 16  # picounicorn width (amount of LEDs)
 HEIGHT = 7  # picounicorn heigth (amount of LEDs)
 
-# current interrupt
 ACTIVE_TRIGGER = TRIGGER_RUN
 
 
@@ -42,31 +40,31 @@ def init_picounicorn() -> None:
 class Matrix:
     LENGTH_PREFIX = (7, 17)  # shifting up beginning of matrix line to the top or above
 
-    delays = [0.256, 0.128, 0.098, 0.064, 0.032, 0.020, 0.010]  # the lower the value the faster it moves
+    # the lower the value the faster it moves
+    delays = (0.256, 0.128, 0.098, 0.064, 0.032, 0.020, 0.010)
 
     black = (0, 0, 0)
-
-    green = ((0, 120, 0), (0, 40, 0), black)
-    red = ((180, 0, 0), (70, 0, 0), black)
-    blue = ((0, 0, 120), (0, 0, 50), black)
-    white = ((80, 80, 80), (30, 30, 30), black)
-    bright_green = ((0, 255, 0), (0, 90, 0), black)
-    bright_red = ((255, 0, 0), (90, 0, 0), black)
-    bright_blue = ((0, 0, 255), (0, 0, 90), black)
-    bright_white = ((255, 255, 255), (100, 100, 100), black)
-    dark_green = ((0, 60, 0), (0, 20, 0), black)
-    dark_red = ((90, 0, 0), (25, 0, 0), black)
-    dark_blue = ((0, 0, 60), (0, 0, 25), black)
-    dark_white = ((50, 50, 50), (20, 20, 20), black)
-
-    colors = (green, red, blue, white, bright_green, bright_red, bright_blue, bright_white, dark_green, dark_red, dark_blue, dark_white)
-    # colors = (green,)
+    
+    colors = (
+        ((0, 120, 0), (0, 40, 0), black), # green
+        ((180, 0, 0), (70, 0, 0), black), # red
+        ((0, 0, 120), (0, 0, 50), black), # blue
+        ((80, 80, 80), (30, 30, 30), black), # white
+        ((0, 255, 0), (0, 90, 0), black), # bright_green
+        ((255, 0, 0), (90, 0, 0), black), # bright_red
+        ((0, 0, 255), (0, 0, 90), black), # bright_blue
+        ((255, 255, 255), (100, 100, 100), black), # bright_white
+        ((0, 60, 0), (0, 20, 0), black), # dark_green
+        ((90, 0, 0), (25, 0, 0), black), # dark_red
+        ((0, 0, 60), (0, 0, 25), black), # dark_blue
+        ((50, 50, 50), (20, 20, 20), black), # dark_white
+    )
 
     # lengths in dots of starting (bright) part, following dots and dots inbetween
-    compositions = [((1, 1), (4, 15), (1, 3)),
+    compositions = (((1, 1), (4, 15), (1, 3)),
                     ((1, 2), (7, 25), (2, 4)),
                     ((1, 1), (3, 10), (1, 2)),
-                    ((1, 2), (4, 15), (0, 0))]
+                    ((1, 2), (4, 15), (0, 0)))
 
     def __init__(self):
         self.current_color_index, self.current_delay_index, self.current_composition_index = 0, 1, 0
@@ -99,6 +97,7 @@ class Matrix:
                 await uasyncio.sleep(self.delay)
             if TRIGGER_TOGGLE_A <= ACTIVE_TRIGGER <= TRIGGER_TOGGLE_C:
                 await self.mode_trigger_methods.get(ACTIVE_TRIGGER)()
+                #                 init_picounicorn()
                 ACTIVE_TRIGGER = TRIGGER_RUN
             await uasyncio.sleep(0)
 
@@ -116,13 +115,13 @@ class _MatrixLine:
         self.comp_supplier = comp_supplier
         self.current_comp_index = 0
         self.current_comp = self.comp_supplier()[self.current_comp_index]
-        self.dots = [2 for _ in range(shift)]
+        self.dots = [2 for _ in range(shift)] # initial shifting of line start to already have some variety in the beginning
 
     def get_visible_dots(self) -> []:
         while len(self.dots) < HEIGHT:
             self._add_dots()
         visible_dots = self.dots[0:HEIGHT]
-        self.dots = self.dots[1:]
+        self.dots = self.dots[1:] # remove lowest dot from line
         return visible_dots
 
     def _add_dots(self) -> None:
@@ -135,20 +134,23 @@ async def toggle_mode(trigger: int) -> None:
     print(f"trigger: {trigger}")
     global ACTIVE_TRIGGER
     ACTIVE_TRIGGER = trigger
-    await uasyncio.sleep(0.5)
+    await uasyncio.sleep(0.3)
 
 
 async def handle_buttons():
     while True:
         if picounicorn.is_pressed(picounicorn.BUTTON_A):
-            await toggle_mode(TRIGGER_STOP) if ACTIVE_TRIGGER != TRIGGER_STOP else await toggle_mode(TRIGGER_RUN)
+            if ACTIVE_TRIGGER != TRIGGER_STOP:
+                await toggle_mode(TRIGGER_STOP)
+            else:
+                await toggle_mode(TRIGGER_RUN)
         if picounicorn.is_pressed(picounicorn.BUTTON_B):
             await toggle_mode(TRIGGER_TOGGLE_A)
         if picounicorn.is_pressed(picounicorn.BUTTON_X):
             await toggle_mode(TRIGGER_TOGGLE_B)
         if picounicorn.is_pressed(picounicorn.BUTTON_Y):
             await toggle_mode(TRIGGER_TOGGLE_C)
-        await uasyncio.sleep(0.2)
+        await uasyncio.sleep(0.1)
 
 
 if __name__ == "__main__":
