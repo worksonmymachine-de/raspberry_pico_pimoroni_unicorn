@@ -1,7 +1,6 @@
 # import asyncio as uasyncio
 import uasyncio
 import random
-import logger
 import picounicorn
 
 # triggers:
@@ -11,12 +10,40 @@ TRIGGER_TOGGLE_A = 2
 TRIGGER_TOGGLE_B = 3
 TRIGGER_TOGGLE_C = 4
 
+ACTIVE_TRIGGER = TRIGGER_RUN
+
 # pico unicorn constants
 WIDTH = 16
 HEIGHT = 7
 
-# current interrupt
-ACTIVE_TRIGGER = TRIGGER_RUN
+LENGTH_PREFIX = (HEIGHT, 17)  # shifting up beginning of matrix line to the top or above
+
+# the lower the value the faster it moves
+delays = (
+    (0.2, 0.4), (0.1, 0.2), (0.07, 0.1), (0.05, 0.07), (0.03, 0.05), (0.02, 0.03), (0.01, 0.02), (0.005, 0.01))
+
+# color combinations - rbg values for start, body and gap
+_black = (0, 0, 0)
+colors = (
+    ((0, 120, 0), (0, 40, 0), _black),  # green
+    ((180, 0, 0), (70, 0, 0), _black),  # red
+    ((0, 0, 120), (0, 0, 50), _black),  # blue
+    ((80, 80, 80), (30, 30, 30), _black),  # white
+    ((0, 255, 0), (0, 90, 0), _black),  # bright_green
+    ((255, 0, 0), (90, 0, 0), _black),  # bright_red
+    ((0, 0, 255), (0, 0, 90), _black),  # bright_blue
+    ((255, 255, 255), (100, 100, 100), _black),  # bright_white
+    ((0, 60, 0), (0, 20, 0), _black),  # dark_green
+    ((90, 0, 0), (25, 0, 0), _black),  # dark_red
+    ((0, 0, 60), (0, 0, 25), _black),  # dark_blue
+    ((50, 50, 50), (20, 20, 20), _black),  # dark_white
+)
+
+# lengths in dots of starting (bright) part, following dots and dots inbetween
+compositions = (((1, 1), (4, 15), (1, 3)),
+                ((1, 2), (7, 25), (2, 4)),
+                ((1, 1), (3, 10), (1, 2)),
+                ((1, 2), (4, 15), (0, 0)))
 
 
 def next_index_and_value(values: [], current_index: int) -> (int, tuple):
@@ -31,66 +58,47 @@ def random_range_factor(limit: (float, float), factor=1000) -> float:
     return random_range((int(limit[0] * factor), int(limit[1] * factor))) / factor
 
 
+def create_matrix_cache() -> []:
+    cache = []
+    for _ in range(WIDTH):
+        cache.append([[2, 2, 2, 2, 2, 2]])
+    return cache
+
+
 def init_picounicorn() -> None:
     picounicorn.init()
     for x in range(picounicorn.get_width()):
         for y in range(picounicorn.get_height()):
-            picounicorn.set_pixel(x, y, 0, 0, 0)
+            picounicorn.set_pixel_value(x, y, 0)
 
 
 class Matrix:
-    LENGTH_PREFIX = (HEIGHT, 17)  # shifting up beginning of matrix line to the top or above
-
-    # the lower the value the faster it moves
-    delays = (
-        (0.2, 0.4), (0.1, 0.2), (0.07, 0.1), (0.05, 0.07), (0.03, 0.05), (0.02, 0.03), (0.01, 0.02), (0.005, 0.01))
-
-    # color combinations - rbg values for start, body and gap
-    black = (0, 0, 0)
-    colors = (
-        ((0, 120, 0), (0, 40, 0), black),  # green
-        ((180, 0, 0), (70, 0, 0), black),  # red
-        ((0, 0, 120), (0, 0, 50), black),  # blue
-        ((80, 80, 80), (30, 30, 30), black),  # white
-        ((0, 255, 0), (0, 90, 0), black),  # bright_green
-        ((255, 0, 0), (90, 0, 0), black),  # bright_red
-        ((0, 0, 255), (0, 0, 90), black),  # bright_blue
-        ((255, 255, 255), (100, 100, 100), black),  # bright_white
-        ((0, 60, 0), (0, 20, 0), black),  # dark_green
-        ((90, 0, 0), (25, 0, 0), black),  # dark_red
-        ((0, 0, 60), (0, 0, 25), black),  # dark_blue
-        ((50, 50, 50), (20, 20, 20), black),  # dark_white
-    )
-
-    # lengths in dots of starting (bright) part, following dots and dots inbetween
-    compositions = (((1, 1), (4, 15), (1, 3)),
-                    ((1, 2), (7, 25), (2, 4)),
-                    ((1, 1), (3, 10), (1, 2)),
-                    ((1, 2), (4, 15), (0, 0)))
-
     def __init__(self):
         self.current_color_index, self.current_delay_index, self.current_composition_index = 0, 0, 0
-        self.color = self.colors[self.current_color_index]
-        self.delay = self.delays[self.current_delay_index]
-        self.comp = self.compositions[self.current_composition_index]
+        self.color = colors[self.current_color_index]
+        self.delay = delays[self.current_delay_index]
+        self.comp = compositions[self.current_composition_index]
         self.lines = self._create_lines()
         self.mode_trigger_methods = {TRIGGER_TOGGLE_A: self.cycle_colors,
                                      TRIGGER_TOGGLE_B: self.cycle_scrolling_speeds,
                                      TRIGGER_TOGGLE_C: self.cycle_line_compositions}
+        self.matrix_cache = create_matrix_cache()
 
     async def cycle_colors(self):
-        self.current_color_index, self.color = next_index_and_value(self.colors, self.current_color_index)
+        self.current_color_index, self.color = next_index_and_value(colors, self.current_color_index)
+        self.update_display()
 
     async def cycle_scrolling_speeds(self):
-        self.current_delay_index, self.delay = next_index_and_value(self.delays, self.current_delay_index)
+        self.current_delay_index, self.delay = next_index_and_value(delays, self.current_delay_index)
+        self.update_scrolling_speeds()
 
     async def cycle_line_compositions(self):
-        self.current_composition_index, self.comp = next_index_and_value(self.compositions,
+        self.current_composition_index, self.comp = next_index_and_value(compositions,
                                                                          self.current_composition_index)
 
     def _create_lines(self) -> []:
         return [MatrixLine(i, lambda: self.comp, lambda: self.delay,
-                           random_range(self.LENGTH_PREFIX), self.update_line) for i in range(WIDTH)]
+                           random_range(LENGTH_PREFIX), self.update_line) for i in range(WIDTH)]
 
     async def loop(self):
         global ACTIVE_TRIGGER
@@ -104,11 +112,20 @@ class Matrix:
         for line in self.lines:
             uasyncio.create_task(line.loop())
 
-    def update_line(self, x, line):
+    def update_line(self, x: int, line: [], cache=True):
         for y, part in enumerate(line):
-            r, g, b = self.colors[self.current_color_index][part]
-            #                 logger.info(lambda: f"setting color {r},{g},{b} at coords {x},{HEIGHT - 1 - y}")
+            r, g, b = colors[self.current_color_index][part]
             picounicorn.set_pixel(x, HEIGHT - 1 - y, r, g, b)  # shifting up lines to the top of picounicorn
+        if cache:
+            self.matrix_cache[x] = line
+
+    def update_display(self):
+        for x in range(WIDTH):
+            self.update_line(x, self.matrix_cache[x], cache=False)
+
+    def update_scrolling_speeds(self):
+        for line in self.lines:
+            line.current_delay = random_range_factor(delays[self.current_delay_index])
 
 
 class MatrixLine:
