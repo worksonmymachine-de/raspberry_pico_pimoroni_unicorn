@@ -1,4 +1,3 @@
-# import asyncio as uasyncio
 import uasyncio
 import random
 import picounicorn
@@ -83,6 +82,7 @@ class Matrix:
                                      TRIGGER_TOGGLE_B: self.cycle_scrolling_speeds,
                                      TRIGGER_TOGGLE_C: self.cycle_line_compositions}
         self.matrix_cache = create_matrix_cache()
+        self.start_loops()
 
     async def cycle_colors(self):
         self.current_color_index, self.color = next_index_and_value(colors, self.current_color_index)
@@ -100,7 +100,7 @@ class Matrix:
         return [MatrixLine(i, lambda: self.comp, lambda: self.delay,
                            random_range(LENGTH_PREFIX), self.update_line) for i in range(WIDTH)]
 
-    async def loop(self):
+    async def handle_toggle_triggers(self):
         global ACTIVE_TRIGGER
         while True:
             if TRIGGER_TOGGLE_A <= ACTIVE_TRIGGER <= TRIGGER_TOGGLE_C:
@@ -108,9 +108,10 @@ class Matrix:
                 ACTIVE_TRIGGER = TRIGGER_RUN
             await uasyncio.sleep(0)
 
-    def loop_lines(self):
+    def start_loops(self):
+        uasyncio.create_task(self.handle_toggle_triggers())
         for line in self.lines:
-            uasyncio.create_task(line.loop())
+            uasyncio.create_task(line.scroll())
 
     def update_line(self, x: int, line: [], cache=True):
         for y, part in enumerate(line):
@@ -157,7 +158,7 @@ class MatrixLine:
     def _randomize_scrolling_speed(self) -> None:
         self.current_delay = random_range_factor(self.delay_supplier())
 
-    async def loop(self) -> None:
+    async def scroll(self) -> None:
         while True:
             while ACTIVE_TRIGGER == TRIGGER_RUN:
                 self.callback_update_line(self.x_coord, self._get_visible_dots())
@@ -185,10 +186,8 @@ async def handle_buttons():
 
 
 if __name__ == "__main__":
-    m = Matrix()
     init_picounicorn()
     loop = uasyncio.get_event_loop()
+    Matrix()
     uasyncio.create_task(handle_buttons())
-    uasyncio.create_task(m.loop())
-    m.loop_lines()
     loop.run_forever()
