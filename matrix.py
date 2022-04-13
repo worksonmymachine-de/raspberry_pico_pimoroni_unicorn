@@ -146,11 +146,11 @@ class MatrixLine:
     async def scroll(self) -> None:
         while True:
             while ACTIVE_TRIGGER == TRIGGER_RUN:
-                while len(self.dots) <= HEIGHT:  # lengthen line if too short for display + 1 (because of .pop(0))
+                self.dots.pop(0)  # remove first dot from line for scrolling
+                while len(self.dots) < HEIGHT:  # lengthen line if too short for display
                     self._add_dots()
                     self._randomize_scrolling_speed()
                 self.callback_show(self.x_coord, self.dots, self.dir_supplier)
-                self.dots.pop(0)  # remove lowest dot from line
                 await uasyncio.sleep(self.current_delay)
             await uasyncio.sleep(0)
 
