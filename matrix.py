@@ -2,23 +2,19 @@ import uasyncio
 import random
 import picounicorn
 
-# triggers:
+# triggers - used for program control in async environment
 TRIGGER_RUN, TRIGGER_1, TRIGGER_2, TRIGGER_3, TRIGGER_4 = 0, 1, 2, 3, 4
 triggers = (TRIGGER_1, TRIGGER_2, TRIGGER_3, TRIGGER_4)
-
 ACTIVE_TRIGGER = TRIGGER_RUN
 
-# pico unicorn constants
-WIDTH, HEIGHT = 16, 7
+WIDTH, HEIGHT = 16, 7  # pico unicorn constants
+START, BODY, GAP = 0, 1, 2  # line parts
+line_parts = (START, BODY, GAP)
 
-LENGTH_PREFIX = (HEIGHT, 17)  # shifting up beginning of matrix line to the top or above
-
-# the lower the value the faster it moves
-delays = (
+delays = (  # the lower the value the faster it moves
     (0.2, 0.4), (0.1, 0.2), (0.07, 0.1), (0.05, 0.07), (0.03, 0.05), (0.02, 0.03), (0.01, 0.02), (0.005, 0.01))
 
-# color combinations - rbg values for start, body and gap
-_black = (0, 0, 0)
+_black = (0, 0, 0)  # color combinations - rbg values for start, body and gap
 colors = (
     ((0, 120, 0), (0, 40, 0), _black),  # green
     ((180, 0, 0), (70, 0, 0), _black),  # red
@@ -47,11 +43,8 @@ compositions = (((1, 1), (4, 15), (1, 3)),  # medium long, short start
                 ((0, 1), (0, 0), (20, 50)))  # very few shiny small rain drops with very long gap
 
 # directions in which the lines will scroll
-directions = (
-    lambda: lambda y: HEIGHT - 1 - y,  # downwards
-    lambda: lambda y: y,  # upwards
-    lambda: random.choice((lambda y: HEIGHT - 1 - y, lambda y: y))  # random direction
-)
+downwards, upwards = lambda y: HEIGHT - 1 - y, lambda y: y
+directions = (lambda: downwards, lambda: upwards, lambda: random.choice((downwards, upwards)))
 
 
 def next_index(values: (), current_index: int) -> int:
@@ -74,46 +67,47 @@ def init_picounicorn() -> None:
 
 
 class Matrix:
-    def __init__(self):
-        self.direction_index, self.color_index, self.delay_index, self.composition_index = 0, 0, 1, 0
+    def __init__(self, config=(0, 0, 2, 0)):
+        self.direction_index, self.color_index, self.delay_index, self.composition_index = config
         self.lines = self._create_lines()
         self.trigger_methods = {TRIGGER_1: self.cycle_colors, TRIGGER_2: self.cycle_scrolling_speeds,
                                 TRIGGER_3: self.cycle_scrolling_directions, TRIGGER_4: self.cycle_line_compositions}
-        self.matrix_cache = self.create_matrix_cache()
+        self.matrix_cache = [[GAP for _1 in range(HEIGHT)] for _2 in range(WIDTH)]
         self.start_loops()
-
-    @staticmethod
-    def create_matrix_cache() -> []:
-        return [[2 for _1 in range(HEIGHT)] for _2 in range(WIDTH)]
 
     async def cycle_colors(self) -> None:
         self.color_index = next_index(colors, self.color_index)
-        self.update_display()
+        for x in range(WIDTH):  # instantly applying new color (not waiting for scrolling delay)
+            self.update_line(x, self.matrix_cache[x], self.lines[x].dir_supplier, cache=False)
 
     async def cycle_scrolling_speeds(self) -> None:
         self.delay_index = next_index(delays, self.delay_index)
-        self.update_scrolling_speeds()
+        for line in self.lines:  # applying new scrolling speed (delay)
+            line.current_delay = random_range_factor(delays[self.delay_index])
 
     async def cycle_scrolling_directions(self) -> None:
         self.direction_index = next_index(directions, self.direction_index)
-        self.update_scrolling_directions()
+        for line in self.lines:  # applying new scrolling direction
+            line.dir_supplier = directions[self.direction_index]()
 
     async def cycle_line_compositions(self) -> None:
         self.composition_index = next_index(compositions, self.composition_index)
+        for x, line in enumerate(self.lines):  # shortening very long lines to see comp change earlier
+            line.dots = line.dots[0: len(line.dots) - 20] if HEIGHT <= len(line.dots) >= 30 else line.dots
 
     def _create_lines(self) -> []:
         return [MatrixLine(x_coord=i, comp_supplier=lambda: compositions[self.composition_index],
                            delay_supplier=lambda: delays[self.delay_index],
-                           direction_supplier=directions[self.direction_index](),
-                           shift=random_range(LENGTH_PREFIX),
-                           callback_update_line=self.update_line) for i in range(WIDTH)]
+                           dir_supplier=directions[self.direction_index](),
+                           shift=random_range((HEIGHT, 17)),  # initial shift of line start
+                           callback_show=self.update_line) for i in range(WIDTH)]
 
     async def handle_toggle_triggers(self) -> None:
         global ACTIVE_TRIGGER
         while True:
             if ACTIVE_TRIGGER in triggers:
                 await self.trigger_methods.get(ACTIVE_TRIGGER)()
-                ACTIVE_TRIGGER = TRIGGER_RUN
+                ACTIVE_TRIGGER = TRIGGER_RUN  # resetting trigger when method has been executed
             await uasyncio.sleep(0)
 
     def start_loops(self) -> None:
@@ -122,54 +116,41 @@ class Matrix:
             uasyncio.create_task(line.scroll())
 
     def update_line(self, x: int, line: [], direction_supplier, cache=True) -> None:
-        for y, part in enumerate(line):
-            r, g, b = colors[self.color_index][part]
+        for y in range(HEIGHT):
+            r, g, b = colors[self.color_index][line[y]]
             picounicorn.set_pixel(x, direction_supplier(y), r, g, b)  # shifting up lines to the top of picounicorn
         if cache:
             self.matrix_cache[x] = line
 
-    def update_display(self) -> None:
-        for x in range(WIDTH):
-            self.update_line(x, self.matrix_cache[x], self.lines[x].direction_supplier, cache=False)
-
-    def update_scrolling_speeds(self) -> None:
-        for line in self.lines:
-            line.current_delay = random_range_factor(delays[self.delay_index])
-
-    def update_scrolling_directions(self) -> None:
-        for line in self.lines:
-            line.direction_supplier = directions[self.direction_index]()
-
 
 class MatrixLine:
-    def __init__(self, x_coord: int, comp_supplier, delay_supplier, direction_supplier, shift: int,
-                 callback_update_line) -> None:
+    def __init__(self, x_coord: int, comp_supplier, delay_supplier, dir_supplier, shift: int, callback_show) -> None:
         self.x_coord = x_coord
         self.delay_supplier = delay_supplier
         self.current_delay = random_range_factor(self.delay_supplier())
-        self.direction_supplier = direction_supplier
+        self.dir_supplier = dir_supplier
         self.comp_supplier = comp_supplier
         self.current_comp_index = 0
-        self.dots = [2 for _ in range(shift)]  # initial shifting of line start for some variety in the beginning
-        self.callback_update_line = callback_update_line
+        self.dots = [GAP for _ in range(shift)]  # initial shift of line start for diversity at start
+        self.callback_show = callback_show
+
+    def _randomize_scrolling_speed(self) -> None:
+        if self.current_comp_index == START:  # randomizing when we just added a start part to the line
+            self.current_delay = random_range_factor(self.delay_supplier())
 
     def _add_dots(self) -> None:
         for _ in range(random_range(self.comp_supplier()[self.current_comp_index])):
-            self.dots.append(self.current_comp_index)
+            self.dots.append(line_parts[self.current_comp_index])
         self.current_comp_index = next_index(self.comp_supplier(), self.current_comp_index)
-        if self.current_comp_index == 0:
-            self._randomize_scrolling_speed()
-
-    def _randomize_scrolling_speed(self) -> None:
-        self.current_delay = random_range_factor(self.delay_supplier())
 
     async def scroll(self) -> None:
         while True:
             while ACTIVE_TRIGGER == TRIGGER_RUN:
-                while len(self.dots) < HEIGHT:  # lengthen line if too short for display
+                while len(self.dots) <= HEIGHT:  # lengthen line if too short for display + 1 (because of .pop(0))
                     self._add_dots()
-                self.callback_update_line(self.x_coord, self.dots[0:HEIGHT], self.direction_supplier)
-                self.dots = self.dots[1:]  # remove lowest dot from line
+                    self._randomize_scrolling_speed()
+                self.callback_show(self.x_coord, self.dots, self.dir_supplier)
+                self.dots.pop(0)  # remove lowest dot from line
                 await uasyncio.sleep(self.current_delay)
             await uasyncio.sleep(0)
 
@@ -182,15 +163,15 @@ async def set_trigger(trigger: int) -> None:
 
 async def handle_buttons() -> None:
     while True:
-        if picounicorn.is_pressed(picounicorn.BUTTON_A):
+        while picounicorn.is_pressed(picounicorn.BUTTON_A):
             await set_trigger(TRIGGER_1)
-        if picounicorn.is_pressed(picounicorn.BUTTON_B):
+        while picounicorn.is_pressed(picounicorn.BUTTON_B):
             await set_trigger(TRIGGER_2)
-        if picounicorn.is_pressed(picounicorn.BUTTON_X):
+        while picounicorn.is_pressed(picounicorn.BUTTON_X):
             await set_trigger(TRIGGER_3)
-        if picounicorn.is_pressed(picounicorn.BUTTON_Y):
+        while picounicorn.is_pressed(picounicorn.BUTTON_Y):
             await set_trigger(TRIGGER_4)
-        await uasyncio.sleep(0)
+        await uasyncio.sleep(0.1)
 
 
 if __name__ == "__main__":
