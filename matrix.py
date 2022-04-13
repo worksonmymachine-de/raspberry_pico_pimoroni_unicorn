@@ -93,7 +93,7 @@ class Matrix:
     async def cycle_line_compositions(self) -> None:
         self.composition_index = next_index(compositions, self.composition_index)
         for x, line in enumerate(self.lines):  # shortening very long lines to see comp change earlier
-            line.dots = line.dots[0: len(line.dots) - 20] if HEIGHT <= len(line.dots) >= 30 else line.dots
+            line.dots = line.dots[0: len(line.dots) - 20] if HEIGHT <= len(line.dots) >= 40 else line.dots
 
     def _create_lines(self) -> []:
         return [MatrixLine(x_coord=i, comp_supplier=lambda: compositions[self.composition_index],
