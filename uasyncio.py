@@ -14,3 +14,7 @@ def get_event_loop():
 
 def run_forever():
     pass
+
+
+def run(_):
+    pass
